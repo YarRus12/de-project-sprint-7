@@ -39,9 +39,10 @@ events_messages = contacts('2022-06-21', 30, spark)\
     .sample(fraction=0.01, seed=3000)
 
 """
-#Полная выборка
+#Случайная выборка за весь период
 events_messages = reactions = spark.read.parquet(base_url+events_base_path)\
             .select('event', 'event_type', 'date', radians(col('lat')).alias('lon'), radians(col('lon')).alias('lat'))
+            .sample(fraction=0.001, seed=3000)
 
 """
 
@@ -99,7 +100,7 @@ city_events = events\
     .select('event', 'event_type', 'city','date','distanse')\
     .withColumn("row_number",row_number().over(Window.partitionBy("event").orderBy("distanse")))\
     .where("row_number=1")\
-    .select('event', 'event_type', 'date', 'city')
+    .select('event', 'event_type', 'date', 'city', 'lat', 'lon')
 
 #Берем сообщения
 messages = city_events.where("event.message_from is not Null")
@@ -149,6 +150,8 @@ first_view.show(500, False)
 
 
 ###############
+# Шаг 3
+
 from pyspark.sql.functions import radians
 from pyspark.sql.functions import regexp_replace, col
 
@@ -160,10 +163,20 @@ citiesSchema = StructType([
     StructField("lng", StringType(), True)
 ])
 
+
+"""
+Делаем выборку данных о городах (это повтор. В перспективе переделать тестовую партицию выше, который передадим сюда. для избежания повтора кода)
+"""
+
 cities = spark.read.option("delimiter", ";").option("header", "true").schema(citiesSchema).csv(base_url+'/user/yarruss12/data/geo.csv')\
     .withColumn('city_long', radians(regexp_replace(F.col("lat"), ',', '.').cast(DoubleType())))\
     .withColumn('city_lat', radians(regexp_replace(F.col("lng"), ',', '.').cast(DoubleType())))\
     .select('id','city','city_lat','city_long')
+
+
+"""
+Собираем данные по месяцам и неделям. это можно переделать в функции, если получится. Одни и теже операции. Две выборки
+"""
 
 
 messages_month = city_events\
@@ -226,7 +239,7 @@ week.show()
 # что значит: Пока присвойте таким событиям координаты последнего отправленного сообщения конкретного пользователя. Это про что?
 
 
-
+""" Базу тоже можно оптимизировать. Напимер сперва база и добавление чрезе функцию полей витрины"""
 base = city_events\
     .join(cities, 'city')\
     .select(F.month('date').alias('month'), F.weekofyear('date').alias('week'), F.col('id').alias('zone_id'))
@@ -243,5 +256,86 @@ second_view = base\
 second_view.show(500)
 
 
+
+
+###############
+# Шаг 4
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import sin, row_number
+from pyspark.sql.window import Window
+from pyspark.sql.types import *
+from pyspark.sql.functions import sin,cos,asin,sinh,sqrt
+import pyspark.sql.functions as F
+import datetime
+from pyspark.sql.functions import udf, max, expr, desc, row_number, collect_set, sum
+from pyspark.sql.window import Window
+
+base_url = 'hdfs://rc1a-dataproc-m-dg5lgqqm7jju58f9.mdb.yandexcloud.net:8020'
+events_base_path = '/user/master/data/geo/events'
+
+spark = SparkSession.builder \
+                    .master("local") \
+                    .appName("Learning DataFrames") \
+                    .getOrCreate()              
+
+
+#открываем тестовую выборку
+events = spark.read\
+                .parquet(f"{base_url}/user/yarruss12/analytics/test")    
+
+
+#Определяем расстояние каждого события до городов и выбираем город с минимальным расстоянием
+city_events = events\
+    .withColumn('1', F.pow(F.sin((F.col('city_lat') - F.col('lat')) /F.lit(2)), 2))\
+    .withColumn('2', cos(F.col('city_lat'))*cos(F.col('lat')))\
+    .withColumn('3', F.pow(F.sin((F.col('city_long') - F.col('lon'))/F.lit(2)), 2))\
+    .withColumn('4', sqrt(F.col('1')+(F.col('2')*F.col('3'))))\
+    .withColumn('distanse', 2*6371*(asin((F.col('4')))))\
+    .select('event', 'event_type', 'city','date','distanse','lat', 'lon')\
+    .withColumn("row_number",row_number().over(Window.partitionBy("event").orderBy("distanse")))\
+    .where("row_number=1")\
+    .select('event', 'event_type', 'date', 'city', 'lat', 'lon')
+
+# Все подписки всех пользователей и их координаты
+user_sub = city_events\
+    .where("event_type ='subscription'")\
+    .select('event.user', 'event.subscription_channel',F.col('lat').alias('user_lat'), F.col('lon').alias('user_lon'), 'city')
+user_sub2 = user_sub.select(F.col('user').alias('contact'), 'subscription_channel',F.col('user_lat').alias('contact_lat'), F.col('user_lon').alias('contact_lon'))
+# Все уникальные пары пользователей с одинаковыми подписками и
+all_subsribers_close = user_sub.join(user_sub2, 'subscription_channel', 'full').distinct()\
+                .withColumn('1', F.pow(F.sin((F.col('contact_lat') - F.col('user_lat')) /F.lit(2)), 2))\
+                .withColumn('2', cos(F.col('contact_lat'))*cos(F.col('user_lat')))\
+                .withColumn('3', F.pow(F.sin((F.col('contact_lon') - F.col('user_lon'))/F.lit(2)), 2))\
+                .withColumn('4', sqrt(F.col('1')+(F.col('2')*F.col('3'))))\
+                .withColumn('distanse', 2*6371*(asin((F.col('4')))))\
+                .select('user', F.col('contact').alias('user_right'), 'distanse', 'city')\
+                .where('distanse is not null').where('distanse < 50.0').where('user != user_right')
+
+    
+all_subsribers_close.show()
+
+# Все сообщения, их авторы и получатели
+out_user_contacts = city_events\
+    .select(F.col('event.message_from').alias('user'), F.col('event.message_to').alias('user_right'))\
+    .where("event_type ='message'")
+
+receive_user_contacts = city_events\
+    .select(F.col('event.message_to').alias('user'), F.col('event.message_from').alias('user_right'))\
+    .where("event_type ='message'")
+
+# Пары пользователелей, которые никогда не общались друг с другом
+non_chatting_users = out_user_contacts.join(receive_user_contacts, 'user', 'leftanti')
+
+non_chatting_users.show(1)
+
+third_view = all_subsribers_close.join(non_chatting_users, ['user', 'user_right'], 'left')
+third_view.show()
+
+#user_left — первый пользователь;
+#user_right — второй пользователь;
+#processed_dttm — дата расчёта витрины;
+#zone_id — идентификатор зоны (города);
+#local_time — локальное время.
 
 

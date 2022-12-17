@@ -47,12 +47,12 @@ def create_test_partitions(base_url, events_base_path, spark):
 
     cities = spark.read.option("delimiter", ";").option("header", "true").schema(cities_schema).csv(
         base_url + '/user/yarruss12/data/geo.csv') \
-        .withColumn('city_long', radians(regexp_replace(F.col("lat"), ',', '.').cast(DoubleType()))) \
-        .withColumn('city_lat', radians(regexp_replace(F.col("lng"), ',', '.').cast(DoubleType()))) \
+        .withColumn('city_long', radians(regexp_replace(F.col("lng"), ',', '.').cast(DoubleType()))) \
+        .withColumn('city_lat', radians(regexp_replace(F.col("lat"), ',', '.').cast(DoubleType()))) \
         .select('id', 'city', 'city_lat', 'city_long')
 
     events_messages = chosen_test_data(base_url=base_url, events_base_path=events_base_path, date='2022-06-21',
                                        depth=60, spark_session=spark)
     result = events_messages.crossJoin(cities)
     # Тестовая выполка для будущих расчетов
-    result.write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/test1")
+    result.write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/test")

@@ -1,5 +1,5 @@
 from pyspark.sql.functions import current_date, col
-import functional
+from src.scripts import functional
 
 
 def all_subscribers_area(data):
@@ -13,7 +13,7 @@ def all_subscribers_area(data):
 
     all_subsribers = user_sub.join(user_sub2, 'subscription_channel', 'full').distinct()
     all_subsribers_near = functional.distance(data=all_subsribers, first_lat='user_lat', second_lat='contact_lat',
-                                   first_lon='user_lon', second_lon='contact_lon').where('distanse is not null').where(
+                                              first_lon='user_lon', second_lon='contact_lon').where('distanse is not null').where(
         'distanse < 50.0') \
         .where('user_left != user_right').select('user_left', 'user_right', 'id')
     return all_subsribers_near

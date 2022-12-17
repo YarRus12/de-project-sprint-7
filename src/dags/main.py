@@ -52,7 +52,7 @@ def second_task(city_events):
 def third_task(city_events):
     """Реализация 2 витрины"""
     third_view.third_view_maker(city_events)\
-        .write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/project/2_view")
+        .write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/project/3_view")
 
 
 dag = DAG(

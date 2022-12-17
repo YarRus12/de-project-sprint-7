@@ -44,8 +44,8 @@ def travel_cities_list(messages):
         .select('user_id', col('collect_list(city)').alias('travel_array'))
 
 
-def first_view(data):
-    # О каких полях идет речь в подсказе? в event нет полей TIME_UTC и timezone????
+def first_view_maker(data):
+    # О каких полях идет речь в подсказке? в event нет полей TIME_UTC и timezone????
     #    .withColumn('localtime', F.from_utc_timestamp(F.col("TIME_UTC"),F.col('timezone')))
     messages = message_filter(data)
     home_city = homecity_finder(messages)

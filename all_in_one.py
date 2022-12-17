@@ -170,7 +170,7 @@ cities = spark.read.option("delimiter", ";").option("header", "true").schema(cit
 
 
 """
-Собираем данные по месяцам и неделям. это можно переделать в функции, если получится. Одни и теже операции. Две выборки
+Собираем данные по месяцам и неделям. это можно переделать в функции, если получится. Одни и те же операции. Две выборки
 """
 
 
@@ -180,7 +180,7 @@ messages_month = city_events\
     .select(F.month('date'), F.col('id').alias('zone_id'))\
     .groupBy('month(date)', 'zone_id').agg(F.count('*').alias('month_message'))\
     .select(F.col('month(date)').alias('month'), 'month_message', 'zone_id')
-    
+
 reaction_month = city_events\
     .join(cities, 'city')\
     .where("event_type = 'reaction'")\
@@ -247,7 +247,7 @@ second_view = base\
     .join(week, ['week', 'zone_id'], 'inner')\
     .select('month','week', 'zone_id', 'week_message', 'week_reaction', 'week_subscription',\
             'month_message', 'month_reaction', 'week_subscription').distinct()
-    
+
 second_view.show(500)
 
 

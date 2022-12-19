@@ -1,6 +1,8 @@
-from pyspark.sql.functions import col, expr, desc, row_number, collect_list, sum, date_sub
+from pyspark.sql.functions import col, expr, desc, row_number, collect_list, sum, date_sub, to_date, date_add, lag
 from pyspark.sql.window import Window
 
+
+# user_id 21395
 
 def message_filter(data):
     return data.where("event.message_from is not Null")
@@ -10,24 +12,14 @@ def homecity_finder(messages):
     # с непрерывным рядом значений есть проблема, нужно видимо сделать udf
     # поэтому для начала выбраны пользователи и города, из которых указанный пользователь чаще всего отправлял сообщения
     # за последние 27 дней
-    """
-    return messages \
-        .withColumn('max_date', expr(""date_add(date,-27) as inc_date"")) \
-        .where(col('date') >= col('max_date')) \
-        .select(col('event.message_from').alias("user_id"), 'city', 'date') \
-        .groupBy("user_id", 'city').count() \
-        .withColumn('rank', row_number().over(Window.partitionBy("user_id").orderBy(desc("count")))) \
-        .where("rank = 1") \
-        .select('user_id', col('city').alias('home_city'))
-    """
-    # Правильный подход
+
+    # Правильный подход только days_num нужно заменить на 26 и протестировать на большой выборке
     return messages \
         .select(col('event.message_from').alias("user_id"), 'city', 'date') \
         .withColumn('rank', row_number().over(Window.partitionBy("user_id", "city").orderBy(desc("date")))) \
-        .withColumn('group_id', date_sub(col('date'), col('rank'))) \
-        .withColumn('group_id', date_sub(col('date'), col('rank'))) \
+        .withColumn('group_id', date_sub(col('date'), col('rank'))).orderBy('user_id') \
         .withColumn('days_num', row_number().over(Window.partitionBy("user_id", "city", "group_id") \
-        .orderBy(desc("date")))).where('days_num > 26').orderBy(desc("date"))
+                                                  .orderBy(desc("date")))).where('days_num > 2')
 
 
 def actual_home_finder(messages):
@@ -40,22 +32,36 @@ def actual_home_finder(messages):
 
 def travel_counter(messages):
     return messages \
-        .where("event.message_from is not Null") \
         .select(col('event.message_from').alias("user_id"), 'city', 'date') \
         .withColumn('rank', row_number().over(Window.partitionBy("user_id", "city").orderBy(desc("date")))) \
         .withColumn('group_id', date_sub(col('date'), col('rank'))) \
         .groupBy("user_id", 'group_id').count() \
-        .show()
-# Надо проверить
+        .select('user_id', col('count').alias('travel_count'))
 
 
 def travel_cities_list(messages):
     return messages \
-        .where("event.message_from is not Null") \
-        .select(col('event.message_from').alias("user_id"), 'city') \
-        .groupBy('user_id').agg(collect_list("city")) \
-        .select('user_id', col('collect_list(city)').alias('travel_array'))
+        .select(col('event.message_from').alias("user_id"), 'city', 'date') \
+        .withColumn('rank', row_number().over(Window.partitionBy("user_id", "city").orderBy(desc("date")))) \
+        .withColumn('group_id', date_add(to_date(col("date"), "yyyy-MM-dd"), -col('rank'))) \
+        .groupBy("user_id", 'group_id').agg(collect_list('city'))
+
+
 # Надо переработать
+def travel_cities_list(messages):
+    return messages \
+        .select(col('event.message_from').alias("user_id"), 'city', 'date') \
+        .withColumn('rank', row_number().over(Window.partitionBy("user_id", "city").orderBy(desc("date")))) \
+        .withColumn('group_id', date_sub(col('date'), col('rank'))) \
+        .groupBy("user_id", 'group_id').agg(collect_list('city'))
+
+
+def travel_cities_list_log_test(messages):
+    return messages \
+        .select(col('event.message_from').alias("user_id"), 'city', 'date') \
+        .withColumn('rank', row_number().over(Window.partitionBy("user_id", "city").orderBy(desc("date")))) \
+        .withColumn('group_id', date_sub(col('date'), col('rank'))) \
+        .withColumn('lag', lag('group_id', 1).over(Window.partitionBy("user_id").orderBy(desc("group_id"))))
 
 
 def first_view_maker(data):

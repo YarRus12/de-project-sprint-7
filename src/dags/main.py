@@ -27,7 +27,7 @@ city_events = []
 def take_df(spark_session):
     """Базовая выборка для построения витрин"""
     events = spark_session.read \
-        .parquet(f"{base_url}/user/yarruss12/analytics/test")
+        .parquet(f"{base_url}/user/yarruss12/analytics/test100")
 
     city_events = functional.distance(data=events, first_lat='lat', second_lat='city_lat', first_lon='lon',
                                       second_lon='city_long') \

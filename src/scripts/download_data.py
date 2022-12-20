@@ -5,6 +5,7 @@ from pyspark.sql.types import *
 from pyspark.sql.functions import regexp_replace, col
 
 
+
 def input_event_paths(base_url, events_base_path, date, depth):
     return [base_url + f'{events_base_path}' \
             + f"/date={dt.datetime.strptime(date, '%Y-%m-%d').date() - dt.timedelta(days=days)}"
@@ -37,6 +38,14 @@ def chosen_test_data(base_url, events_base_path, spark_session):
 """
 
 
+def create_registration_df(base_url, spark):
+    schema = StructType([
+        StructField("user_id", IntegerType(), True),
+        StructField("registration_date", TimestampType(), True)])
+    df_reg = spark.createDataFrame([], schema)
+    df_reg.write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/allregistration")
+
+
 def create_test_partitions(base_url, events_base_path, spark):
     cities_schema = StructType([
         StructField("id", IntegerType(), True),
@@ -44,7 +53,7 @@ def create_test_partitions(base_url, events_base_path, spark):
         StructField("lat", StringType(), True),
         StructField("lng", StringType(), True)
     ])
-
+    create_registration_df(base_url=base_url, spark=spark)
     cities = spark.read.option("delimiter", ";").option("header", "true").schema(cities_schema).csv(
         base_url + '/user/yarruss12/data/geo.csv') \
         .withColumn('city_long', radians(regexp_replace(F.col("lng"), ',', '.').cast(DoubleType()))) \
@@ -56,3 +65,5 @@ def create_test_partitions(base_url, events_base_path, spark):
     result = events_messages.crossJoin(cities)
     # Тестовая выполка для будущих расчетов
     result.write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/test")
+
+

@@ -45,7 +45,20 @@ def first_task(city_events):
 
 def second_task(city_events):
     """Реализация 2 витрины"""
-    second_view.second_view_maker(city_events)\
+    from pyspark.sql.functions import min, col
+    # Дополнительная обработка регистрации, в проме я бы отнес это на отдельную джобу и выполнял бы по рассписанию,
+    # Но здесь это делать наверное нет нужды
+    old_users = spark.read \
+        .parquet(f"{base_url}/user/yarruss12/analytics/allregistration").select('user_id')
+    new_users = city_events.select(col('event.message_from').alias('user_id'), 'date') \
+        .join(old_users, 'user_id', 'leftanti') \
+        .groupBy('user_id').agg(min('date'))
+    spark.catalog.refreshTable("old_users") # Не совсем верно
+    new_users.write.mode("append").parquet(f"{base_url}/user/yarruss12/analytics/allregistration")
+    # данные о датах регистрации пользователей
+    old_registration = spark.read \
+        .parquet(f"{base_url}/user/yarruss12/analytics/allregistration").select('user_id')
+    second_view.second_view_maker(city_events, old_registration)\
         .write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/project/2_view")
 
 
@@ -83,6 +96,3 @@ third_task = PythonOperator(task_id='third_task',
                          python_callable=third_task,
                          op_kwargs={'city_events': 'city_events'},
                          dag=dag)
-# create_test_partition # нет нужны так как тестовая партиция уже создана
-
-take_df >> [first_task, second_task, third_task]

@@ -1,5 +1,5 @@
 from pyspark.sql.functions import col, expr, desc, row_number, collect_list, date_format, udf, date_sub, \
-    min, lag, size, max, from_utc_timestamp
+    min, lag, size, max, from_utc_timestamp, lead
 from pyspark.sql.window import Window
 import functional
 
@@ -13,15 +13,14 @@ def homecity_finder(messages):
         .select(col('event.message_from').alias("user_id"), 'city', 'date') \
         .withColumn('rank', row_number().over(Window.partitionBy("user_id", "city").orderBy(desc("date")))) \
         .withColumn('group_id', date_sub(col('date'), col('rank'))).orderBy('user_id') \
-        .withColumn('privious_city', lag('city', 1).over(Window.partitionBy("user_id").orderBy(desc("group_id")))) \
-        .withColumn("mmin", min(col("date")).over(Window.partitionBy("user_id", "city").orderBy("date"))) \
-        .withColumn("mmax", max(col("date")).over(Window.partitionBy("user_id", "city").orderBy(desc("date")))) \
-        .withColumn('all_days', expr("case when city = privious_city then datediff(mmax , mmin) else 0 end")) \
-        .select('user_id', 'city', 'date', 'mmin', 'mmax', 'all_days').distinct() \
-        .where('all_days > 26') \
-        .withColumn('last_record', row_number().over(Window.partitionBy("user_id").orderBy(desc("date")))) \
-        .where('last_record = 1') \
-        .select('user_id', col('city').alias('home_city'))
+        .withColumn('privious_city', lag('city', 1).over(Window.partitionBy("user_id").orderBy("group_id"))) \
+        .where('city != privious_city or privious_city is null')\
+        .withColumn('privious_date', lag('date', 1).over(Window.partitionBy('user_id').orderBy('group_id')))\
+        .withColumn('lived_here_days', expr("case when privious_date is not null then datediff(date, privious_date)\
+                                      else datediff(current_date(), date) end"))\
+        .where('lived_here_days>26')\
+        .withColumn('rank_days', row_number().over(Window.partitionBy("user_id").orderBy(desc("date")))) \
+        .where('rank_days=1').select('user_id', col('city').alias('home_city'))
 
 
 def actual_home_finder(messages):

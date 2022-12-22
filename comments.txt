@@ -1,18 +1,21 @@
-Привет)
-Вчера засиделся за обработкой ошибок и случайно залил не тот код в first_view.py
-Сейчас там нужная версия создания первой витрины, посмотри, пожалуйста
+Да, Артем, ты прав это несколько неправильный подход
+Поправил как ты предложил, только немного в другом порядке
 
-Что касается второй вьюхи, ты прав в коде
+Изменил порядок соритровки
+.withColumn('privious_city', lag('city', 1).over(Window.partitionBy("user_id").orderBy("group_id")))
+прежний порядок менял местами текущий и предыдущий города
+Отфильтровал совпадающие города
+.where('city != privious_city or privious_city is null')
+Определил дату проживания в прежнем городе
+.withColumn('privious_date', lag('date', 1).over(Window.partitionBy('user_id').orderBy('group_id')))\
+если дата проживания в прежнем городе существовала то считаем разницу между текущей датой и датой проживания в прежнем городе
+если нет, считаем разницу между current_date и сообщением
+.withColumn('lived_here_days', expr("case when privious_date is not null then datediff(date, privious_date)\
+                                      else datediff(current_date(), date) end"))\
+фильтруем разницу
+.where('lived_here_days>26')\
+оставляем только одну последнюю по дате запись по каждому пользователю
+.withColumn('rank_days', row_number().over(Window.partitionBy("user_id").orderBy(desc("date")))) \
+.where('rank_days=1').select('user_id', col('city').alias('home_city'))
 
-def month_data(data, old_registration):
-    messages_month_registration = data \
-        .where("event_type = 'message'") \
-        .select('user_id', 'zone_id', 'date') \
-        .join(old_registration, 'user_id', 'leftanti')
-
-leftanti нужно было заменить на inner, это моя невнимательность
-Первоначально задумывалося план: залить новых пользователей, через leftanti отфильтровать тех, кто уже есть в стороннем представлении
-Потом возникла идея, выделить этот процесс в отдельную стадию
-Все поправил, а вот способ соединения забыл, сорри
-
-Замечания реализованы в коде. Жду проверки, особенно первой витрины!
+Вроде все как было задумано) если нет, будем править)

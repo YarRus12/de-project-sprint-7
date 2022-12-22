@@ -42,7 +42,7 @@ def travel_cities(messages):
         .withColumn('rank', row_number().over(Window.partitionBy("user_id", "city").orderBy(desc("date")))) \
         .withColumn('group_id', date_sub(col('date'), col('rank'))) \
         .withColumn('lag', lag('city', 1).over(Window.partitionBy("user_id").orderBy(desc("group_id")))) \
-        .withColumn('all_city', expr("case when city != lag then city end")) \
+        .withColumn('all_city', expr("case when city != lag or lag is null then city end")) \
         .where('all_city is not NULL').groupBy("user_id").agg(collect_list('all_city')) \
         .select('user_id', col('collect_list(all_city)').alias('travel_array'),
                 size(col('collect_list(all_city)')).alias('travel_count'))

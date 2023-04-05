@@ -37,7 +37,6 @@ def chosen_test_data(base_url, events_base_path, spark_session):
     return events_data
 """
 
-
 def create_registration_df(base_url, spark):
     schema = StructType([
         StructField("user_id", IntegerType(), True),

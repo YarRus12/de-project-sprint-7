@@ -15,42 +15,39 @@ spark = SparkSession.builder \
     .appName("Learning DataFrames") \
     .getOrCreate()
 
-
-def create_test_partition(base_url, events_base_path, spark_session):
-    """ Подготовка данных """
-    download_data.create_test_partitions(base_url=base_url, events_base_path=events_base_path, spark=spark_session)
-
-
 city_events = []
+
+def create_test_partition(url, events_path, spark_session):
+    """ Подготовка данных """
+    download_data.create_test_partitions(base_url=url, events_base_path=events_path, spark=spark_session)
 
 
 def take_df(spark_session):
     """Базовая выборка для построения витрин"""
     events = spark_session.read \
         .parquet(f"{base_url}/user/yarruss12/analytics/test100")
-
-    city_events = functional.distance(data=events, first_lat='lat', second_lat='city_lat', first_lon='lon',
-                                      second_lon='city_long') \
+    city_events_data = functional.distance(data=events, first_lat='lat', second_lat='city_lat', first_lon='lon',
+                                           second_lon='city_long') \
         .select('event', 'event_type', 'id', 'city', 'date', 'lat', 'lon', 'distanse') \
         .withColumn("row_number", row_number().over(Window.partitionBy("event").orderBy("distanse"))) \
         .where("row_number=1")
-    return city_events
+    return city_events_data
 
 
-def first_task(city_events):
+def first_task(city_events_data):
     """Реализация 1 витрины"""
-    first_view.first_view_maker(city_events)\
+    first_view.first_view_maker(city_events_data)\
         .write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/project/1_view")
 
 
-def second_task(city_events):
+def second_task(city_events_data):
     """Реализация 2 витрины"""
     from pyspark.sql.functions import min, col
     # Дополнительная обработка регистрации, в проме я бы отнес это на отдельную джобу и выполнял бы по рассписанию,
     # Но здесь это делать наверное нет нужды
     old_users = spark.read \
         .parquet(f"{base_url}/user/yarruss12/analytics/allregistration").select('user_id')
-    new_users = city_events.select(col('event.message_from').alias('user_id'), 'date') \
+    new_users = city_events_data.select(col('event.message_from').alias('user_id'), 'date') \
         .join(old_users, 'user_id', 'leftanti') \
         .groupBy('user_id').agg(min('date'))
     spark.catalog.refreshTable("old_users") # Не совсем верно
@@ -58,13 +55,13 @@ def second_task(city_events):
     # данные о датах регистрации пользователей
     old_registration = spark.read \
         .parquet(f"{base_url}/user/yarruss12/analytics/allregistration").select('user_id')
-    second_view.second_view_maker(city_events, old_registration)\
+    second_view.second_view_maker(city_events_data, old_registration)\
         .write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/project/2_view")
 
 
-def third_task(city_events):
+def third_task(city_events_data):
     """Реализация 2 витрины"""
-    third_view.third_view_maker(city_events)\
+    third_view.third_view_maker(city_events_data)\
         .write.mode("overwrite").parquet(f"{base_url}/user/yarruss12/analytics/project/3_view")
 
 

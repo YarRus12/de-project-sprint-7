@@ -93,3 +93,5 @@ third_task = PythonOperator(task_id='third_task',
                          python_callable=third_task,
                          op_kwargs={'city_events': 'city_events'},
                          dag=dag)
+
+create_test_partition >> take_df >> [first_task >> second_task >> third_task]

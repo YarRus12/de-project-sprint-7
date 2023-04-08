@@ -30,7 +30,7 @@ def chosen_test_data(base_url, events_base_path, date, depth, spark_session):
 
 """
 def chosen_test_data(base_url, events_base_path, spark_session):    
-    # Случайная выборка за весь период #очень долго работает
+    # Случайная выборка за весь период очень долго работает
     events_messages = reactions = spark.read.parquet(base_url + events_base_path) \
         .select('event', 'event_type', 'date', radians(col('lat')).alias('lat'), radians(col('lon')).alias('lon')) \
         .sample(fraction=0.001, seed=3000)

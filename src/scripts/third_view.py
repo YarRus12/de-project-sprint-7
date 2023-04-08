@@ -14,7 +14,7 @@ def all_subscribers_area(data):
     all_subsribers = user_sub.join(user_sub2, 'subscription_channel', 'inner').where('user_left < user_right').distinct()
     all_subsribers_near = functional.distance(data=all_subsribers, first_lat='user_lat', second_lat='contact_lat',
                                               first_lon='user_lon', second_lon='contact_lon').where('distanse is not null').where(
-        'distanse < 50.0').select('user_left', 'user_right', 'id', 'city')
+        'distanse < 1.0').select('user_left', 'user_right', 'id', 'city')
     return all_subsribers_near
 
 
@@ -23,7 +23,7 @@ def non_chatting_users(data):
     out_user_contacts = data \
         .select(col('event.message_from').alias('user_left'), col('event.message_to').alias('user_right')) \
         .where("event_type ='message'")
-    # затем выбираем все ПОЛУЧАТЕЛЕЙ и даем им все тоже имя user_left. Отправителей же именуем user_right
+    # затем выбираем всех ПОЛУЧАТЕЛЕЙ и даем им все тоже имя user_left. Отправителей же именуем user_right
     receive_user_contacts = data \
         .select(col('event.message_to').alias('user_left'), col('event.message_from').alias('user_right')) \
         .where("event_type ='message'")
